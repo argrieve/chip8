@@ -67,6 +67,7 @@ uint8_t font_set[FONT_SIZE] =
  * Public Functions
  */
 int chip8_load_rom(char *rom);
+void chip8_cycle();
 
 /*
  * Private Functions
