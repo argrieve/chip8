@@ -1,4 +1,5 @@
 #include "chip8.h"
+#include "time.h"
 
 int chip8_load_rom(char *rom)
 {
@@ -148,42 +149,69 @@ void chip8_cycle()
 					reg_pc += 2;
 					break;
 
+				// 0x8XY5 - subtract VY from VX, set VF to 0 if there's a borrow, else 1
 				case 0x0005:
-					
+					if (reg_v[(opcode & 0x00F0) >> 4] > reg_v[(opcode & 0x0F00) >> 8] )
+						reg_v[0xF] = 0; // a borrow ocurred
+					else
+						reg_v[0xF] = 1;
+					reg_v[(opcode & 0x0F00) >> 8] -= reg_v[(opcode & 0x00F0) >> 4];
+					reg_pc += 2;
 					break;
 
+				// 0x8XY6 - shift VX right 1 bit, VF is set to LSB of VX before the shift
 				case 0x0006:
-					
+					reg_v[0xF] = reg_v[(opcode & 0x0F00) >> 8] & 0x1;
+					reg_v[(opcode & 0x0F00) >> 8] >>= 1;
+					reg_pc += 2;
 					break;
 
+				// 0x8XY7 - set VX to VY-VX, set VF to 0 if there's a borrow, else 1
 				case 0x0007:
-					
+					if (reg_v[(opcode & 0x0F00) >> 8] > reg_v[(opcode & 0x00F0) >> 4] )
+						reg_v[0xF] = 0;
+					else
+						reg_v[0xF] = 1;
+					reg_v[(opcode & 0x0F00) >> 8] = reg_v[(opcode & 0x00F0) >> 4] - reg_v[(opcode & 0x0F00) >> 8];
+					reg_pc += 2;
 					break;
 
+				// 0x8XYE - shift VX left by 1 bit, VF is set to MSB of VX before the shift
 				case 0x000E:
-					
+					reg_v[0xF] = reg_v[(opcode & 0x0F00) >> 8] >> 7;
+					reg_v[(opcode & 0x0F00) >> 8] <<= 1;
+					reg_pc += 2;
 					break;
 
 				default:
-
+					printf("Unknown opcode 0x%x\n", opcode);
 					break;
 			}
 			break;
 
+		// 0x9XY0 - skip next instruction if VX != VY
 		case 0x9000:
-			
+			if (reg_v[(opcode & 0x0F00) >> 8] != reg_v[(opcode & 0x00F0) >> 4] )
+				reg_pc += 4;
+			else
+				reg_pc += 2;
 			break;
 
+		// 0xANNN - sets register I to address NNN
 		case 0xA000:
-			
+			reg_i = opcode & 0x0FFF;
+			reg_pc += 2;
 			break;
 
+		// 0xBNNN - jump to address NNN + V0
 		case 0xB000:
-			
+			reg_pc = (opcode & 0x0FFF) + reg_v[0];	
 			break;
 
+		// 0xCXNN - sets VX to a random number AND NN
 		case 0xC000:
-			
+			reg_v[(opcode & 0x0F00) >> 8] = (rand() % 0xFF) & (opcode & 0x00FF);
+			reg_pc += 2;
 			break;
 
 		case 0xD000:
@@ -235,6 +263,9 @@ void chip8_reset()
 	timer_delay = 0;
 	timer_sound = 0;
 	draw_flag = 0;
+	
+	// Reseed rand() function for a couple instructions
+	srand(time(NULL));
 }
 
 int main()
