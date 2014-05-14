@@ -25,6 +25,8 @@ uint16_t reg_i;
 uint16_t reg_pc;
 
 // Graphics buffer
+#define SCREEN_WIDTH 64
+#define SCREEN_HEIGHT 32
 #define SCREEN_SIZE 2048 // 64W x 32H
 uint8_t gfx[SCREEN_SIZE];
 uint8_t draw_flag;
