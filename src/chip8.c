@@ -214,16 +214,158 @@ void chip8_cycle()
 			reg_pc += 2;
 			break;
 
+		// 0xDXYN - draw sprite at position VX, VY - this op is screwy, see comments below
 		case 0xD000:
-			
+			{
+				uint8_t x = reg_v[(opcode & 0x0F00) >> 8]; // starting x position
+				uint8_t y = reg_v[(opcode & 0x00F0) >> 4]; // starting y position
+				uint8_t height = opcode & 0x000F; // height of the sprite (number of rows)
+				uint8_t pixel;
+				// read N bytes from memory starting at location I
+				// each byte read represents 8 pixels (each bit is a pixel)
+				// set VF to 1 if any pixels get flipped
+				reg_v[0xF] = 0;
+				int xline, yline;
+				for (yline = 0; yline < height; ++yline)
+				{
+					pixel = mem[reg_i + yline];
+					for (xline = 0; xline < 8; ++xline)
+					{
+						if ((pixel & (0x80 >> xline)) != 0) 
+						{
+							int index = x + xline + ((y + yline) * SCREEN_WIDTH);
+							if (gfx[index] == 1) reg_v[0xF] = 1;
+							gfx[index] ^= 1;
+						}
+					}
+				}
+				draw_flag = 0;
+				reg_pc += 2;
+			}
 			break;
 
 		case 0xE000:
-			
+			switch (opcode & 0x0001)
+			{
+				// 0xEX9E - skip next instruction if key stored in VX is pressd 
+				case 0x0000:
+					if (keys[reg_v[(opcode & 0x0F00) >> 8]] != 0)
+						reg_pc += 4;
+					else
+						reg_pc += 2;
+					break;
+
+				// 0xEXA1 - skip next instruction if key stored in VX isn't pressed
+				case 0x0001:
+					if (keys[reg_v[(opcode & 0x0F00) >> 8]] == 0)
+						reg_pc += 4;
+					else
+						reg_pc += 2;
+					break;
+
+				default:
+					printf("Unknown opcode 0x%x\n", opcode);
+					break;
+			}
 			break;
 
 		case 0xF000:
-			
+			switch (opcode & 0x00FF)
+			{
+				// 0xFX07 - set VX to the value of the delay timer
+				case 0x0007:
+					reg_v[(opcode & 0x0F00) >> 8] = timer_delay;
+					reg_pc += 2;
+					break;
+				
+				// 0xFX0A - a key press is awaited, then stored in VX
+				case 0x000A:
+					{
+						// this is a hack, but should work
+						uint8_t key_pressed = 0;
+						int i;
+						for (i = 0; i < NUM_KEYS; ++i)
+						{
+							if (keys[i] != 0)
+							{
+								reg_v[(opcode & 0x0F00) >> 8] = i;
+								key_pressed = 1;
+							}
+						}
+						if (!key_pressed) return; // we will try again on the next cycle
+						reg_pc += 2;
+					}	
+					break;
+
+				// 0xFX15 - sets the delay timer to VX
+				case 0x0015:
+					timer_delay = reg_v[(opcode & 0x0F00) >> 8];
+					reg_pc += 2;
+					break;
+
+				// 0xFX18 - sets the sound timer to VX
+				case 0x0018:
+					timer_sound = reg_v[(opcode & 0x0F00) >> 8];
+					reg_pc += 2;
+					break;
+
+				// 0xFX1E - add VX to I
+				case 0x001E:
+					// be sure to check for overflow!
+					if ((reg_i + reg_v[(opcode & 0x0F00) >> 8]) > 0xFFF)
+						reg_v[0xF] = 1;
+					else
+						reg_v[0xF] = 0;
+					reg_i += reg_v[(opcode & 0x0F00) >> 8];
+					reg_pc += 2;
+					break;
+
+				// 0xFX29 - set I to the location of the sprite for the character in VX. Characters 0-F (HEX) are represented by a 4x5 font 
+				case 0x0029:
+					reg_i = reg_v[(opcode & 0x0F00) >> 8] * 0x5;
+					reg_pc += 2;
+					break;
+
+				// 0xFX33 - weird opcode. Take the decimal representation of VX and put the hundreds digit at I, tens digit at I+1, and ones digit at I+2
+				case 0x0033:
+					mem[reg_i] = reg_v[(opcode & 0x0F00) >> 8] / 100;
+					mem[reg_i + 1] = (reg_v[(opcode & 0x0F00) >> 8] / 10) % 10;
+					mem[reg_i + 2] = (reg_v[(opcode & 0x0F00) >> 8] % 100) % 10;
+					reg_pc += 2;
+					break;
+
+				// 0xFX55 - store V0 to VX in memory starting at address I
+				case 0x0055:
+				{
+					uint8_t end = (opcode & 0x0F00) >> 8;
+					uint8_t i;
+					for (i = 0; i <= end; ++i)
+						mem[reg_i + i] = reg_v[i];
+
+					// according to the wiki, the original interpreter sets I = I + X + 1
+					reg_i += ((opcode & 0x0F00) >> 8) + 1;
+					reg_pc += 2;
+				}
+				break;
+				
+				// 0xFX65 - fill V0 to VX with values starting at memory address I
+				case 0x0065:
+				{
+					uint8_t end = (opcode & 0xF00) >> 8;
+					uint8_t i;
+					for (i = 0; i<= end; ++i)
+						reg_v[i] = mem[reg_i + i];
+
+					// according to the wiki, the original interpreter sets I = I + X + 1
+					reg_i += ((opcode & 0x0F00) >> 8) + 1;
+					reg_pc += 2;
+				}
+				break;
+
+				default:
+					printf("Unknown opcode 0x%x\n", opcode);
+					break;
+			}	
 			break;
 
 	}
